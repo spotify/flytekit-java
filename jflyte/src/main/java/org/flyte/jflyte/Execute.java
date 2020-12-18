@@ -20,6 +20,7 @@ import static org.flyte.jflyte.ClassLoaders.withClassLoader;
 
 import flyteidl.core.Errors;
 import flyteidl.core.Literals;
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
@@ -29,7 +30,6 @@ import java.nio.channels.WritableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
@@ -72,7 +72,7 @@ public class Execute implements Callable<Integer> {
 
   @Option(
       names = {"--indexFileLocation"},
-      required = true)
+      required = false)
   private String indexFileLocation;
 
   @Override
@@ -83,11 +83,9 @@ public class Execute implements Callable<Integer> {
 
   private void execute() {
     Config config = Config.load();
-    Collection<ClassLoader> modules = ClassLoaders.forModuleDir(config.moduleDir()).values();
-    Map<String, FileSystem> fileSystems = FileSystemLoader.loadFileSystems(modules);
-    List<String> stagedFiles = readStagedFiles(fileSystems, indexFileLocation);
-
-    ClassLoader packageClassLoader = loadPackage(fileSystems, stagedFiles);
+    Map<String, ClassLoader> modules = ClassLoaders.forModuleDir(config.moduleDir());
+    Map<String, FileSystem> fileSystems = FileSystemLoader.loadFileSystems(modules.values());
+    ClassLoader packageClassLoader = loadPackage(config, fileSystems, modules);
 
     FileSystem inputFs = FileSystemLoader.getFileSystem(fileSystems, inputs);
     FileSystem outputFs = FileSystemLoader.getFileSystem(fileSystems, outputPrefix);
@@ -116,6 +114,38 @@ public class Execute implements Callable<Integer> {
       LOG.error("failed to run task", e);
 
       writeError(outputFs, outputPrefix, ProtoUtil.serializeThrowable(e));
+    }
+  }
+
+  // We support two modes: using staged class path (--indexFileLocation), or using standalone docker
+  // image
+  // and specifying FLYTE_INTERNAL_MAIN_MODULE.
+  private ClassLoader loadPackage(
+      Config config, Map<String, FileSystem> fileSystems, Map<String, ClassLoader> modules) {
+    if (indexFileLocation != null) {
+      List<String> stagedFiles = readStagedFiles(fileSystems, indexFileLocation);
+
+      return loadStagedPackage(fileSystems, stagedFiles);
+    } else {
+      if (config.mainModule() == null) {
+        throw new IllegalArgumentException(
+            "FLYTE_INTERNAL_MAIN_MODULE env. variable or --indexFileLocation "
+                + "must be set specified. If you are seeing this error, likely something "
+                + "is wrong with docker image packaging.");
+      }
+
+      ClassLoader mainModule = modules.get(config.mainModule());
+
+      if (mainModule == null) {
+        String absolutePath = new File(config.moduleDir(), config.mainModule()).getAbsolutePath();
+        throw new IllegalArgumentException(
+            String.format(
+                "Can't find any jars in [%s] module. "
+                    + "Please double-check module directory [%s] in [%s] Docker image",
+                config.mainModule(), absolutePath, config.image()));
+      }
+
+      return mainModule;
     }
   }
 
@@ -218,7 +248,7 @@ public class Execute implements Callable<Integer> {
     }
   }
 
-  private static ClassLoader loadPackage(
+  private static ClassLoader loadStagedPackage(
       Map<String, FileSystem> fileSystems, List<String> stagedFiles) {
     try {
       Path tmp = Files.createTempDirectory("tasks");

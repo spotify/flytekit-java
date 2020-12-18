@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import javax.annotation.Nullable;
 import org.flyte.api.v1.Container;
 import org.flyte.api.v1.KeyValuePair;
 import org.flyte.api.v1.LaunchPlan;
@@ -79,17 +80,42 @@ public class RegisterWorkflows implements Callable<Integer> {
   @Option(
       names = {"-cp", "--classpath"},
       description = "Directory with packaged jars",
-      required = true)
+      required = false)
   private String packageDir;
 
   @Override
   public Integer call() {
     Config config = Config.load();
-    ArtifactStager stager = getArtifactStager(config);
 
     try (FlyteAdminClient adminClient =
         FlyteAdminClient.create(config.platformUrl(), config.platformInsecure())) {
-      registerAll(stager, config.image(), adminClient);
+
+      String indexFileLocation;
+      ClassLoader packageClassLoader;
+
+      if (packageDir != null) {
+        ArtifactStager stager = getArtifactStager(config);
+        List<Artifact> artifacts = stagePackageFiles(stager, packageDir);
+        Artifact indexFile = stageIndexFile(stager, artifacts);
+
+        packageClassLoader = ClassLoaders.forDirectory(new File(packageDir));
+        indexFileLocation = indexFile.location();
+      } else {
+        if (config.mainModule() == null) {
+          throw new IllegalArgumentException(
+              "FLYTE_INTERNAL_MAIN_MODULE env. variable or --classpath must be specified. ");
+        }
+
+        packageClassLoader =
+            ClassLoaders.forDirectory(new File(config.moduleDir(), config.mainModule()));
+        indexFileLocation = null;
+      }
+
+      registerAll(
+          /* image= */ config.image(),
+          /* indexFileLocation= */ indexFileLocation,
+          /* packageClassLoader= */ packageClassLoader,
+          /* adminClient= */ adminClient);
     }
 
     return 0;
@@ -116,22 +142,28 @@ public class RegisterWorkflows implements Callable<Integer> {
   }
 
   private TaskTemplate createTaskTemplate(
-      RunnableTask task, String indexFileLocation, String image, List<KeyValuePair> env) {
+      RunnableTask task, @Nullable String indexFileLocation, String image, List<KeyValuePair> env) {
+
+    ImmutableList.Builder<String> argsBuilder =
+        ImmutableList.<String>builder()
+            .add(
+                "jflyte",
+                "execute",
+                "--task",
+                task.getName(),
+                "--inputs",
+                "{{.input}}",
+                "--outputPrefix",
+                "{{.outputPrefix}}");
+
+    if (indexFileLocation != null) {
+      argsBuilder.add("--indexFileLocation", indexFileLocation);
+    }
+
     Container container =
         Container.builder()
             .command(ImmutableList.of())
-            .args(
-                ImmutableList.of(
-                    "jflyte",
-                    "execute",
-                    "--task",
-                    task.getName(),
-                    "--inputs",
-                    "{{.input}}",
-                    "--outputPrefix",
-                    "{{.outputPrefix}}",
-                    "--indexFileLocation",
-                    indexFileLocation))
+            .args(argsBuilder.build())
             .image(image)
             .env(env)
             .build();
@@ -143,12 +175,11 @@ public class RegisterWorkflows implements Callable<Integer> {
         .build();
   }
 
-  private void registerAll(ArtifactStager stager, String image, FlyteAdminClient adminClient) {
-    ClassLoader packageClassLoader = ClassLoaders.forDirectory(new File(packageDir));
-
-    List<Artifact> artifacts = stagePackageFiles(stager, packageDir);
-    Artifact indexFile = stageIndexFile(stager, artifacts);
-
+  private void registerAll(
+      String image,
+      @Nullable String indexFileLocation,
+      ClassLoader packageClassLoader,
+      FlyteAdminClient adminClient) {
     Map<String, String> env =
         ImmutableMap.of(
             "JFLYTE_DOMAIN", domain,
@@ -190,7 +221,7 @@ public class RegisterWorkflows implements Callable<Integer> {
       TaskTemplate taskTemplate =
           createTaskTemplate(
               task,
-              /* indexFileLocation= */ indexFile.location(),
+              /* indexFileLocation= */ indexFileLocation,
               /* image= */ image,
               /* env= */ envList);
 

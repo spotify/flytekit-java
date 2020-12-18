@@ -22,7 +22,6 @@ import javax.annotation.Nullable;
 /** Configuration file for jflyte. */
 @AutoValue
 abstract class Config {
-
   abstract String platformUrl();
 
   abstract String image();
@@ -31,6 +30,9 @@ abstract class Config {
   abstract String stagingLocation();
 
   abstract String moduleDir();
+
+  @Nullable
+  abstract String mainModule();
 
   abstract boolean platformInsecure();
 
@@ -41,6 +43,7 @@ abstract class Config {
         .image(getenv("FLYTE_INTERNAL_IMAGE"))
         .stagingLocation(getenvOrNull("FLYTE_STAGING_LOCATION"))
         .platformInsecure(Boolean.parseBoolean(getenv("FLYTE_PLATFORM_INSECURE")))
+        .mainModule(getenvOrNull("FLYTE_INTERNAL_MAIN_MODULE"))
         .build();
   }
 
@@ -74,6 +77,8 @@ abstract class Config {
     abstract Builder moduleDir(String moduleDir);
 
     abstract Builder platformInsecure(boolean platformInsecure);
+
+    public abstract Builder mainModule(String mainModule);
 
     abstract Config build();
   }

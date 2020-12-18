@@ -60,9 +60,6 @@
         <configuration>
           <repository>${docker.image}</repository>
           <tag>${docker.tag}</tag>
-          <buildArgs>
-            <FLYTE_INTERNAL_IMAGE>${docker.image}:${docker.tag}</FLYTE_INTERNAL_IMAGE>
-          </buildArgs>
           <contextDirectory>${project.parent.basedir}</contextDirectory>
         </configuration>
       </plugin>

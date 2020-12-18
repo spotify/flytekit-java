@@ -9,7 +9,7 @@ COPY jflyte-aws/target/lib /jflyte/modules/jflyte-aws
 COPY jflyte-google-cloud/target/lib /jflyte/modules/jflyte-google-cloud
 
 ENV FLYTE_INTERNAL_MODULE_DIR "/jflyte/modules"
-ENV FLYTE_INTERNAL_IMAGE=$FLYTE_INTERNAL_IMAGE
+ENV FLYTE_INTERNAL_MAIN_MODULE=java-tasks
 
 ENV FLYTE_PLATFORM_URL "CHANGEME"
 ENV FLYTE_STAGING_LOCATION "CHANGEME"

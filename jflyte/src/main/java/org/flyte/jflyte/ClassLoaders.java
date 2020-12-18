@@ -43,7 +43,7 @@ class ClassLoaders {
   static Map<String, ClassLoader> forModuleDir(String dir) {
     return listDirectory(new File(dir)).stream()
         .filter(File::isDirectory)
-        .map(subDir -> Maps.immutableEntry(subDir.getAbsolutePath(), forDirectory(subDir)))
+        .map(subDir -> Maps.immutableEntry(subDir.getName(), forDirectory(subDir)))
         .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
   }
 
