@@ -40,8 +40,11 @@ We don't publish artifacts yet, but you can build examples yourself.
 Create `.env.local` with:
 
 ```bash
-FLYTE_PLATFORM_URL=flyte.local:81
-FLYTE_STAGING_LOCATION=gs://yourbucket
+FLYTE_PLATFORM_URL=localhost:30081
+FLYTE_AWS_ENDPOINT=http://localhost:30084
+FLYTE_AWS_ACCESS_KEY_ID=minio
+FLYTE_AWS_SECRET_ACCESS_KEY=miniostorage
+FLYTE_STAGING_LOCATION=s3://flyteorg
 FLYTE_PLATFORM_INSECURE=True
 ```
 
